@@ -222,6 +222,17 @@ class Engine(BaseEngine):
 
                 self.set_geo_info(gdal_img)
                 return self.read_vsimem(mem_map_name)
+            elif len(channels) == 3:
+                # BGR 8 bit unsigned int.
+                gdal_img = driver.Create(mem_map_name, h, w, len(channels), gdal.GDT_Byte)
+                band_order = [2, 1, 0]
+                img_bands = [gdal_img.GetRasterBand(i) for i in range(1, 5)]
+                for outband, band_i in zip(img_bands, band_order):
+                    outband.WriteArray(channels[band_i], 0, 0)
+                    outband.SetNoDataValue(-32767)
+                    outband.FlushCache()
+                    del outband
+                del img_bands
             elif len(channels) == 4:
                 # BGRA 8 bit unsigned int.
                 gdal_img = driver.Create(mem_map_name, h, w, len(channels), gdal.GDT_Byte)
