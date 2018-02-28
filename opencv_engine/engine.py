@@ -32,9 +32,6 @@ def new_mime(buffer):
         Returns:
             mime - mime type of image
     '''
-    print()
-    print ('MIME')
-    print()
     SVG_RE = re.compile(r'<svg\s[^>]*([\"\'])http[^\"\']*svg[^\"\']*', re.I)
 
     if buffer.startswith(b'GIF8'):
@@ -325,7 +322,7 @@ class Engine(BaseEngine):
         else:
             rotated = self._rotate(image, degrees)
 
-        self.image = cv2.fromarray(rotated)
+        self.image = rotated
 
     def _rotate(self, image, degrees):
         """ rotate an image about it's center by an arbitrary number of degrees
@@ -347,12 +344,12 @@ class Engine(BaseEngine):
     def flip_vertically(self):
         """ flip an image vertically (about x-axis) """
         image = numpy.asarray(self.image)
-        self.image = cv2.fromarray(cv2.flip(image, 0))
+        self.image = cv2.flip(image, 0)
 
     def flip_horizontally(self):
         """ flip an image horizontally (about y-axis) """
         image = numpy.asarray(self.image)
-        self.image = cv2.fromarray(cv2.flip(image, 1))
+        self.image = cv2.flip(image, 1)
 
     def _get_exif_segment(self):
         """ Override because the superclass doesn't check for no exif.
