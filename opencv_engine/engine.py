@@ -130,9 +130,12 @@ class Engine(BaseEngine):
             self.buffer = buffer
             img0 = self.read_tiff(buffer, create_alpha)
         else:
-            imagefiledata = cv2.CreateMatHeader(1, len(buffer), cv2.CV_8UC1)
-            cv2.SetData(imagefiledata, buffer, len(buffer))
-            img0 = cv2.DecodeImageM(imagefiledata, cv2.CV_LOAD_IMAGE_UNCHANGED)
+            #import pdb; pdb.set_trace()
+            # imagefiledata = cv2.CreateMatHeader(1, len(buffer), cv2.CV_8UC1)
+            # cv2.SetData(imagefiledata, buffer, len(buffer))
+            # img0 = cv2.DecodeImageM(imagefiledata, cv2.CV_LOAD_IMAGE_UNCHANGED)
+
+            img0 = cv2.imdecode(numpy.asarray(bytearray(buffer), dtype=numpy.uint8), -1)
 
         # if FORMATS[self.extension] == 'JPEG':
         #     try:
