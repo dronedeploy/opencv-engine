@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # thumbor imaging service - opencv engine
@@ -8,15 +8,12 @@
 # http://www.opensource.org/licenses/mit-license
 # Copyright (c) 2014 globo.com timehome@corp.globo.com
 
+import re
 import uuid
 import cv2
-try:
-    import cv
-except ImportError:
-    import cv2.cv as cv
 
 from thumbor.engines import BaseEngine
-from pexif import JpegFile, ExifSegment
+#from pexif import JpegFile, ExifSegment
 import gdal
 import numpy
 from osgeo import osr
@@ -35,11 +32,32 @@ def new_mime(buffer):
         Returns:
             mime - mime type of image
     '''
-    mime = old_mime(buffer)
+    print()
+    print ('MIME')
+    print()
+    SVG_RE = re.compile(r'<svg\s[^>]*([\"\'])http[^\"\']*svg[^\"\']*', re.I)
+
+    if buffer.startswith(b'GIF8'):
+        return 'image/gif'
+    elif buffer.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    elif buffer.startswith(b'\xff\xd8'):
+        return 'image/jpeg'
+    elif buffer.startswith(b'WEBP', 8):
+        return 'image/webp'
+    elif buffer.startswith(b'\x00\x00\x00\x0c'):
+        return 'image/jp2'
+    elif buffer.startswith(b'\x00\x00\x00 ftyp'):
+        return 'video/mp4'
+    elif buffer.startswith(b'\x1aE\xdf\xa3'):
+        return 'video/webm'
+    elif buffer.startswith(b'\x49\x49\x2A\x00') or buffer.startswith('\x4D\x4D\x00\x2A'):
+        return 'image/tiff'
+    elif SVG_RE.search(buffer[:2048].replace(b'\0', '')):
+        return 'image/svg+xml'
     # tif files start with 'II'
-    if not mime and buffer.startswith('II'):
-        mime = 'image/tiff'
-    return mime
+    elif buffer.startswith(b'II'):
+        return 'image/tiff'
 
 BaseEngine.get_mimetype = staticmethod(new_mime)
 
@@ -88,10 +106,11 @@ class Engine(BaseEngine):
                     raise Exception("Failed to encode image")
 
             if FORMATS[self.extension] == 'JPEG' and self.context.config.PRESERVE_EXIF_INFO:
-                if hasattr(self, 'exif'):
-                    img = JpegFile.fromString(data)
-                    img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
-                    data = img.writeString()
+                print('JPEG PROBLEM')
+                # if hasattr(self, 'exif'):
+                #     img = JpegFile.fromString(data)
+                #     img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
+                #     data = img.writeString()
 
         return data
 
@@ -111,18 +130,18 @@ class Engine(BaseEngine):
             self.buffer = buffer
             img0 = self.read_tiff(buffer, create_alpha)
         else:
-            imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
-            cv.SetData(imagefiledata, buffer, len(buffer))
-            img0 = cv.DecodeImageM(imagefiledata, cv.CV_LOAD_IMAGE_UNCHANGED)
+            imagefiledata = cv2.CreateMatHeader(1, len(buffer), cv2.CV_8UC1)
+            cv2.SetData(imagefiledata, buffer, len(buffer))
+            img0 = cv2.DecodeImageM(imagefiledata, cv2.CV_LOAD_IMAGE_UNCHANGED)
 
-        if FORMATS[self.extension] == 'JPEG':
-            try:
-                info = JpegFile.fromString(buffer).get_exif()
-                if info:
-                    self.exif = info.data
-                    self.exif_marker = info.marker
-            except Exception:
-                pass
+        # if FORMATS[self.extension] == 'JPEG':
+        #     try:
+        #         info = JpegFile.fromString(buffer).get_exif()
+        #         if info:
+        #             self.exif = info.data
+        #             self.exif_marker = info.marker
+        #     except Exception:
+        #         pass
 
         return img0
 
@@ -132,7 +151,7 @@ class Engine(BaseEngine):
 
         offset = float(getattr(self.context, 'offset', 0.0)) or 0
 
-        mem_map_name = '/vsimem/{}'.format(uuid.uuid4().get_hex())
+        mem_map_name = '/vsimem/{}'.format(uuid.uuid4().hex)
         gdal_img = None
         try:
             gdal.FileFromMemBuffer(mem_map_name, buffer)
@@ -157,7 +176,7 @@ class Engine(BaseEngine):
                 self.no_data_value = gdal_img.GetRasterBand(1).GetNoDataValue()
                 channels.append(numpy.float32(gdal_img.GetRasterBand(1).GetMaskBand().ReadAsArray()))
 
-            return cv.fromarray(cv2.merge(channels))
+            return cv2.merge(channels)
         finally:
             gdal_img = None
             gdal.Unlink(mem_map_name)  # Cleanup.
@@ -256,7 +275,8 @@ class Engine(BaseEngine):
 
     @property
     def size(self):
-        return cv.GetSize(self.image)
+        height, width, channels = self.image.shape
+        return height, width
 
     def normalize(self):
         pass
@@ -280,7 +300,7 @@ class Engine(BaseEngine):
         return mode, self.image.tostring()
 
     def set_image_data(self, data):
-        cv.SetData(self.image, data)
+        cv2.SetData(self.image, data)
 
     def rotate(self, degrees):
         """ rotates the image by specified number of degrees.
@@ -302,7 +322,7 @@ class Engine(BaseEngine):
         else:
             rotated = self._rotate(image, degrees)
 
-        self.image = cv.fromarray(rotated)
+        self.image = cv2.fromarray(rotated)
 
     def _rotate(self, image, degrees):
         """ rotate an image about it's center by an arbitrary number of degrees
@@ -324,12 +344,12 @@ class Engine(BaseEngine):
     def flip_vertically(self):
         """ flip an image vertically (about x-axis) """
         image = numpy.asarray(self.image)
-        self.image = cv.fromarray(cv2.flip(image, 0))
+        self.image = cv2.fromarray(cv2.flip(image, 0))
 
     def flip_horizontally(self):
         """ flip an image horizontally (about y-axis) """
         image = numpy.asarray(self.image)
-        self.image = cv.fromarray(cv2.flip(image, 1))
+        self.image = cv2.fromarray(cv2.flip(image, 1))
 
     def _get_exif_segment(self):
         """ Override because the superclass doesn't check for no exif.
