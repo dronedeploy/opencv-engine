@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # thumbor imaging service - opencv engine
@@ -10,10 +10,12 @@
 
 import re
 import uuid
+
 import cv2
+import piexif
 
 from thumbor.engines import BaseEngine
-#from pexif import JpegFile, ExifSegment
+from pyexiv2 import ImageMetadata
 import gdal
 import numpy
 from osgeo import osr
@@ -102,16 +104,18 @@ class Engine(BaseEngine):
                 else:
                     raise Exception("Failed to encode image")
 
-            if FORMATS[self.extension] == 'JPEG' and self.context.config.PRESERVE_EXIF_INFO:
-                print('JPEG PROBLEM')
-                # if hasattr(self, 'exif'):
-                #     img = JpegFile.fromString(data)
-                #     img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
-                #     data = img.writeString()
+            # if FORMATS[self.extension] == 'JPEG' and self.context.config.PRESERVE_EXIF_INFO:
+            #     import pdb; pdb.set_trace()
+            #     print('JPEG PROBLEM')
+            #     # if hasattr(self, 'exif'):
+            #     #     img = JpegFile.fromString(data)
+            #     #     img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
+            #     #     data = img.writeString()
 
         return data
 
     def create_image(self, buffer, create_alpha=True):
+        #import pdb; pdb.set_trace()
         self.extension = self.extension or '.tif'
         self.no_data_value = None
         # FIXME: opencv doesn't support gifs, even worse, the library
@@ -127,21 +131,12 @@ class Engine(BaseEngine):
             self.buffer = buffer
             img0 = self.read_tiff(buffer, create_alpha)
         else:
-            #import pdb; pdb.set_trace()
-            # imagefiledata = cv2.CreateMatHeader(1, len(buffer), cv2.CV_8UC1)
-            # cv2.SetData(imagefiledata, buffer, len(buffer))
-            # img0 = cv2.DecodeImageM(imagefiledata, cv2.CV_LOAD_IMAGE_UNCHANGED)
-
             img0 = cv2.imdecode(numpy.asarray(bytearray(buffer), dtype=numpy.uint8), -1)
 
-        # if FORMATS[self.extension] == 'JPEG':
-        #     try:
-        #         info = JpegFile.fromString(buffer).get_exif()
-        #         if info:
-        #             self.exif = info.data
-        #             self.exif_marker = info.marker
-        #     except Exception:
-        #         pass
+        if FORMATS[self.extension] == 'JPEG':
+            exif = piexif.load(buffer)
+            if exif:
+                self.exif = exif
 
         return img0
 
@@ -352,12 +347,13 @@ class Engine(BaseEngine):
         self.image = cv2.flip(image, 1)
 
     def _get_exif_segment(self):
-        """ Override because the superclass doesn't check for no exif.
-        """
-        segment = None
+        if (not hasattr(self, 'exif')) or self.exif is None:
+            return None
+
         try:
-            if getattr(self, 'exif', None) is not None:
-                segment = ExifSegment(None, None, self.exif, 'ro')
+            exif_dict = self.exif
         except Exception:
-            logger.warning('Ignored error handling exif for reorientation', exc_info=True)
-        return segment
+            logger.exception('Ignored error handling exif for reorientation')
+        else:
+            return exif_dict
+        return None
