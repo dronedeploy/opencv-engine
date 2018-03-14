@@ -15,7 +15,7 @@ import cv2
 import piexif
 
 from thumbor.engines import BaseEngine
-from pyexiv2 import ImageMetadata
+import piexif
 import gdal
 import numpy
 from osgeo import osr
@@ -79,6 +79,8 @@ FORMATS = {
 class Engine(BaseEngine):
 
     def read(self, extension=None, quality=None):
+        import pdb;
+        pdb.set_trace()
         if not extension and FORMATS[self.extension] == 'TIFF':
             # If the image loaded was a tiff, return the buffer created earlier.
             return self.buffer
@@ -95,7 +97,7 @@ class Engine(BaseEngine):
                 options = [cv2.IMWRITE_JPEG_QUALITY, quality]
 
             if FORMATS[self.extension] == 'TIFF':
-                channels = cv2.split(numpy.asarray(self.image))
+                channels = cv2.split(self.image)
                 data = self.write_channels_to_tiff_buffer(channels)
             else:
                 success, numpy_data = cv2.imencode(self.extension, numpy.asarray(self.image), options or [])
@@ -115,7 +117,6 @@ class Engine(BaseEngine):
         return data
 
     def create_image(self, buffer, create_alpha=True):
-        #import pdb; pdb.set_trace()
         self.extension = self.extension or '.tif'
         self.no_data_value = None
         # FIXME: opencv doesn't support gifs, even worse, the library
@@ -141,6 +142,8 @@ class Engine(BaseEngine):
         return img0
 
     def read_tiff(self, buffer, create_alpha=True):
+        import pdb;
+        pdb.set_trace()
         """ Reads image using GDAL from a buffer, and returns a CV2 image.
         """
 
@@ -171,6 +174,7 @@ class Engine(BaseEngine):
                 self.no_data_value = gdal_img.GetRasterBand(1).GetNoDataValue()
                 channels.append(numpy.float32(gdal_img.GetRasterBand(1).GetMaskBand().ReadAsArray()))
 
+            import pdb; pdb.set_trace()
             return cv2.merge(channels)
         finally:
             gdal_img = None
@@ -218,15 +222,14 @@ class Engine(BaseEngine):
             gdal image buffer containing data in channels.
 
         """
-
         mem_map_name = '/vsimem/{}.tiff'.format(uuid.uuid4().hex)
         driver = gdal.GetDriverByName('GTiff')
         w, h = channels[0].shape
         gdal_img = None
         try:
-            if len(channels) == 1:
+            if channels.shape[2] == 1:
                 # DEM Tiff (32 bit floating point single channel)
-                gdal_img = driver.Create(mem_map_name, w, h, len(channels), gdal.GDT_Float32)
+                gdal_img = driver.Create(mem_map_name, h, w, len(channels), gdal.GDT_Float32)
                 outband = gdal_img.GetRasterBand(1)
                 outband.WriteArray(channels[0], 0, 0)
                 outband.SetNoDataValue(-32767)
@@ -236,9 +239,9 @@ class Engine(BaseEngine):
 
                 self.set_geo_info(gdal_img)
                 return self.read_vsimem(mem_map_name)
-            elif len(channels) == 4:
+            elif channels.shape[2] == 4:
                 # BGRA 8 bit unsigned int.
-                gdal_img = driver.Create(mem_map_name, h, w, len(channels), gdal.GDT_Byte)
+                gdal_img = driver.Create(mem_map_name, w, h, len(channels), gdal.GDT_Byte)
                 band_order = [2, 1, 0, 3]
                 img_bands = [gdal_img.GetRasterBand(i) for i in range(1, 5)]
                 for outband, band_i in zip(img_bands, band_order):
@@ -286,16 +289,17 @@ class Engine(BaseEngine):
         self.image = self.image[y1:y2, x1:x2]
 
     def image_data_as_rgb(self, update_image=True):
-        if self.image.channels == 4:
+        if self.image.shape[2] == 4:
             mode = 'BGRA'
-        elif self.image.channels == 3:
+        elif self.image.shape[2] == 3:
             mode = 'BGR'
         else:
             raise NotImplementedError("Only support fetching image data as RGB for 3/4 channel images")
         return mode, self.image.tostring()
 
     def set_image_data(self, data):
-        cv2.SetData(self.image, data)
+        import pdb; pdb.set_trace()
+        self.image = numpy.frombuffer(data, dtype=self.image.dtype).reshape(self.image.shape)
 
     def rotate(self, degrees):
         """ rotates the image by specified number of degrees.
@@ -349,7 +353,6 @@ class Engine(BaseEngine):
     def _get_exif_segment(self):
         if (not hasattr(self, 'exif')) or self.exif is None:
             return None
-
         try:
             exif_dict = self.exif
         except Exception:
@@ -357,3 +360,4 @@ class Engine(BaseEngine):
         else:
             return exif_dict
         return None
+
