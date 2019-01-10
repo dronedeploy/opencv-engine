@@ -35,7 +35,7 @@ FORMATS = {
 FORMATS.update(TIFF_FORMATS)
 
 
-class Engine(BaseEngine, TiffMixin):
+class Engine(TiffMixin, BaseEngine):
 
     @property
     def image_depth(self):

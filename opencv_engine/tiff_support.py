@@ -144,14 +144,3 @@ class TiffMixin(object):
         gdal_img.SetProjection(srs.ExportToWkt())
         gdal_img.FlushCache()
         del srs
-
-    def _get_exif_segment(self):
-        """ Override because the superclass doesn't check for no exif.
-        """
-        segment = None
-        try:
-            if getattr(self, 'exif', None) is not None:
-                segment = ExifSegment(None, None, self.exif, 'ro')
-        except Exception:
-            logger.warning('Ignored error handling exif for reorientation', exc_info=True)
-        return segment
