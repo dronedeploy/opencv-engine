@@ -42,7 +42,6 @@ class Engine(BaseEngine, TiffMixin):
     def image_channels(self):
         if self.image is None:
             return 3
-        # if the image is grayscale
         try:
             return self.image.shape[2]
         except IndexError:
@@ -105,44 +104,50 @@ class Engine(BaseEngine, TiffMixin):
         pass
 
     def resize(self, width, height):
-        r = height / self.size[1]
-        width = int(self.size[0] * r)
-        dim = (int(round(width, 0)), int(round(height, 0)))
-        self.image = cv2.resize(self.image, dim, interpolation=cv2.INTER_AREA)
+        dims = (int(round(width, 0)), int(round(height, 0)))
+        self.image = cv2.resize(np.asarray(self.image), dims, interpolation=cv2.INTER_CUBIC)
 
     def crop(self, left, top, right, bottom):
         self.image = self.image[top: bottom, left: right]
 
     def rotate(self, degrees):
-        # see http://stackoverflow.com/a/23990392
-        if degrees == 90:
-            self.image = cv2.transpose(self.image)
-            cv2.flip(self.image, 0, self.image)
+        """ rotates the image by specified number of degrees.
+            Uses more effecient flip and transpose for multiples of 90
+
+            Args:
+                degrees - degrees to rotate image by (CCW)
+        """
+        image = np.asarray(self.image)
+        # number passed to flip corresponds to rotation about: (0) x-axis, (1) y-axis, (-1) both axes
+        if degrees == 270:
+            transposed = cv2.transpose(image)
+            rotated = cv2.flip(transposed, 1)
         elif degrees == 180:
-            cv2.flip(self.image, -1, self.image)
-        elif degrees == 270:
-            self.image = cv2.transpose(self.image)
-            cv2.flip(self.image, 1, self.image)
+            rotated = cv2.flip(image, -1)
+        elif degrees == 90:
+            transposed = cv2.transpose(image)
+            rotated = cv2.flip(transposed, 0)
         else:
-            # see http://stackoverflow.com/a/37347070
-            # one pixel glitch seems to happen with 90/180/270
-            # degrees pictures in this algorithm if you check
-            # the typical github.com/recurser/exif-orientation-examples
-            # but the above transpose/flip algorithm is working fine
-            # for those cases already
-            width, height = self.size
-            image_center = (width / 2, height / 2)
-            rot_mat = cv2.getRotationMatrix2D(image_center, degrees, 1.0)
+            rotated = self._rotate(image, degrees)
 
-            abs_cos = abs(rot_mat[0, 0])
-            abs_sin = abs(rot_mat[0, 1])
-            bound_w = int((height * abs_sin) + (width * abs_cos))
-            bound_h = int((height * abs_cos) + (width * abs_sin))
+        self.image = rotated
 
-            rot_mat[0, 2] += ((bound_w / 2) - image_center[0])
-            rot_mat[1, 2] += ((bound_h / 2) - image_center[1])
+    def _rotate(self, image, degrees):
+        """ rotate an image about it's center by an arbitrary number of degrees
 
-            self.image = cv2.warpAffine(self.image, rot_mat, (bound_w, bound_h))
+            Args:
+                image - image to rotate (CvMat array)
+                degrees - number of degrees to rotate by (CCW)
+
+            Returns:
+                rotated image (numpy array)
+        """
+        (h, w) = image.shape[:2]
+        center = (w / 2, h / 2)
+
+        M = cv2.getRotationMatrix2D(center, degrees, 1.0)
+        rotated = cv2.warpAffine(image, M, (w, h))
+        return rotated
 
     def flip_vertically(self):
         self.image = np.flipud(self.image)
@@ -151,6 +156,10 @@ class Engine(BaseEngine, TiffMixin):
         self.image = np.fliplr(self.image)
 
     def read(self, extension=None, quality=None):
+        if not extension and FORMATS[self.extension] == 'TIFF':
+            # If the image loaded was a tiff, return the buffer created earlier.
+            return self.buffer
+
         if quality is None:
             quality = self.context.config.QUALITY
 
@@ -196,10 +205,7 @@ class Engine(BaseEngine, TiffMixin):
         elif self.image_channels == 3:
             mode = 'BGR'
         else:
-            mode = 'BGR'
-            rgb_copy = np.zeros((self.size[1], self.size[0], 3), self.image.dtype)
-            cv2.cvtColor(self.image, cv2.COLOR_GRAY2BGR, rgb_copy)
-            self.image = rgb_copy
+            raise NotImplementedError("Only support fetching image data as RGB for 3/4 channel images")
         return mode, self.image.tostring()
 
     def draw_rectangle(self, x, y, width, height):

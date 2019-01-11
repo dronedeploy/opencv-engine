@@ -3,9 +3,14 @@
 
 import logging
 
+from pexif import ExifSegment
 from thumbor.engines import BaseEngine
 
 __version__ = '1.0.1'
+
+
+logger = logging.getLogger(__name__)
+
 
 try:
     from opencv_engine.engine_cv3 import Engine  # NOQA
@@ -34,4 +39,21 @@ def _patch_mime_types():
     BaseEngine.get_mimetype = staticmethod(new_mime)
 
 
+def _patch_exif():
+
+    def _get_exif_segment(self):
+        """ Override because the superclass doesn't check for no exif.
+        """
+        segment = None
+        try:
+            if getattr(self, 'exif', None) is not None:
+                segment = ExifSegment(None, None, self.exif, 'ro')
+        except Exception:
+            logger.warning('Ignored error handling exif for reorientation', exc_info=True)
+        return segment
+
+    BaseEngine._get_exif_segment = _get_exif_segment
+
+
+_patch_exif()
 _patch_mime_types()
