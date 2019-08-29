@@ -208,4 +208,4 @@ class Engine(BaseEngine, TiffMixin):
             mode = 'BGR'
         else:
             raise NotImplementedError("Only support fetching image data as RGB for 3/4 channel images")
-        return mode, self.image.tostring()
+        return mode, self.image.tobytes()
