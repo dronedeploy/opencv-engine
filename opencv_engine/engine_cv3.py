@@ -204,7 +204,7 @@ class Engine(BaseEngine, TiffMixin):
             rgb_copy = np.zeros((self.size[1], self.size[0], 3), self.image.dtype)
             cv2.cvtColor(self.image, cv2.COLOR_GRAY2BGR, rgb_copy)
             self.image = rgb_copy
-        return mode, self.image.tostring()
+        return mode, self.image.tobytes()
 
     def draw_rectangle(self, x, y, width, height):
         cv2.rectangle(self.image, (int(x), int(y)), (int(x + width), int(y + height)), (255, 255, 255))
